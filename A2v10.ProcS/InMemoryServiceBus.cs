@@ -102,7 +102,7 @@ namespace A2v10.ProcS
 			}
 		}
 
-		private volatile bool running = false;
+		private volatile Boolean running = false;
 
 		public void Stop()
 		{
@@ -127,8 +127,9 @@ namespace A2v10.ProcS
 		private Boolean ProcessItem(ServiceBusItem item)
 		{
 			var saga = _sagaKeeper.GetSagaForMessage(item.Message, out ISagaKeeperKey key, out Boolean isNew);
-			if (saga == null) return false;
-			var task = new Task(async () =>
+			if (saga == null) 
+				return false;
+			Func<Task> task = async () =>
 			{
 				using (var scriptContext = _scriptEngine.CreateContext())
 				{
@@ -137,7 +138,7 @@ namespace A2v10.ProcS
 				}
 				Send(item.After);
 				_sagaKeeper.SagaUpdate(saga, key);
-			});
+			};
 			_taskManager.AddTask(task);
 			return true;
 		}
