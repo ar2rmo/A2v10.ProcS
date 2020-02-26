@@ -1,16 +1,10 @@
 ﻿// Copyright © 2020 Alex Kukhtin, Artur Moshkola. All rights reserved.
 
 using System;
-using System.Linq;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
 
 using A2v10.ProcS.Infrastructure;
-using Microsoft.Extensions.Configuration;
 
 namespace A2v10.ProcS
 {
@@ -45,7 +39,8 @@ namespace A2v10.ProcS
 					}
 				}
 			}
-			if (!found) throw new Exception("Resource must have Constructor without parameters or Constructor marked with RestoreWithAttribute");
+			if (!found) 
+				throw new Exception("Resource must have Constructor without parameters or Constructor marked with RestoreWithAttribute");
 		}
 
 		public Object Create(IDynamicObject data)
@@ -55,11 +50,14 @@ namespace A2v10.ProcS
 			foreach (var p in ct.prms)
 			{
 				if (!data.ContainsKey(p.Name))
-					throw new Exception($"There is no value for constructor parameter {p.Name}");
+					throw new Exception($"There is no value for constructor parameter '{p.Name}'");
 				var dt = data[p.Name];
-				if (!p.ParameterType.IsAssignableFrom(dt.GetType()))
-					dt = DynamicObject.ConvertTo(dt, p.ParameterType);
-				prms[i] = dt;
+				if (dt != null)
+				{
+					if (!p.ParameterType.IsAssignableFrom(dt.GetType()))
+						dt = DynamicObject.ConvertTo(dt, p.ParameterType);
+					prms[i] = dt;
+				}
 				i++;
 			}
 			return Activator.CreateInstance(type, prms);
@@ -173,10 +171,13 @@ namespace A2v10.ProcS
 		{
 			var type = obj.GetType();
 			var att = type.GetCustomAttribute<ResourceKeyAttribute>();
-			if (att == null) throw new Exception("Resource must have ResourceKeyAttribute");
+			if (att == null) 
+				throw new InvalidProgramException("Resource must have ResourceKeyAttribute");
 			IDynamicObject data;
-			if (obj is IStorable sto) data = sto.Store();
-			else data = new DynamicObject();
+			if (obj is IStorable sto) 
+				data = sto.Store(this);
+			else 
+				data = new DynamicObject();
 			return new Resource(att.Key, data);
 		}
 
@@ -197,13 +198,13 @@ namespace A2v10.ProcS
 		private Resource RestoreResource(IDynamicObject obj)
 		{
 			var res = new Resource();
-			res.Restore(obj);
+			res.Restore(obj, this);
 			return res;
 		}
 
 		private Resource RestoreResource(IStorable src)
 		{
-			var d = src.Store();
+			var d = src.Store(this);
 			return RestoreResource(d);
 		}
 
@@ -215,7 +216,7 @@ namespace A2v10.ProcS
 			var fact = resources[key];
 			var obj = fact.Create(res.Object);
 			if (obj is IStorable sto)
-				sto.Restore(res.Object);
+				sto.Restore(res.Object, this);
 			return obj;
 		}
 
@@ -264,14 +265,14 @@ namespace A2v10.ProcS
 
 		private const String key = "$res";
 
-		public IDynamicObject Store()
+		public IDynamicObject Store(IResourceWrapper _)
 		{
 			var d = DynamicObjectConverters.From(Object);
 			d.Set(key, Key);
 			return d;
 		}
 
-		public void Restore(IDynamicObject store)
+		public void Restore(IDynamicObject store, IResourceWrapper _)
 		{
 			var data = DynamicObjectConverters.From(store);
 			Key = data.Get<String>(key);

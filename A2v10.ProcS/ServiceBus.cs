@@ -107,7 +107,8 @@ namespace A2v10.ProcS
 			while (!token.IsCancellationRequested)
 			{
 				var sk = await _sagaKeeper.PickSaga();
-				if (sk.Key == null) break;
+				if (sk.Key == null) 
+					break;
 				ProcessItem(sk);
 			}
 		}
@@ -116,14 +117,22 @@ namespace A2v10.ProcS
 		{
 			async Task task()
 			{
-				var saga = item.Saga;
-				using (var scriptContext = _scriptEngine.CreateContext())
+				try
 				{
-					var hc = new HandleContext(this, _repository, scriptContext);
-					await saga.Handle(hc, item.ServiceBusItem.Message);
+					var saga = item.Saga;
+					using (var scriptContext = _scriptEngine.CreateContext())
+					{
+						var hc = new HandleContext(this, _repository, scriptContext);
+						await saga.Handle(hc, item.ServiceBusItem.Message);
+					}
+					Send(item.ServiceBusItem.After);
+					await _sagaKeeper.ReleaseSaga(item);
+				} 
+				catch (Exception ex)
+				{
+					// TODO: ????
+					int z = 55;
 				}
-				Send(item.ServiceBusItem.After);
-				await _sagaKeeper.ReleaseSaga(item);
 			}
 			_taskManager.AddTask(task);
 		}
@@ -189,7 +198,7 @@ namespace A2v10.ProcS
 		}
 
 		private readonly ReaderWriterLock rwl = new ReaderWriterLock();
-		private volatile TaskCompletionSource<bool> ts = null;
+		private volatile TaskCompletionSource<Boolean> ts = null;
 
 		public async Task Run(CancellationToken token)
 		{
@@ -199,7 +208,7 @@ namespace A2v10.ProcS
 				rwl.AcquireWriterLock(0);
 				try
 				{
-					ts = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+					ts = new TaskCompletionSource<Boolean>(TaskCreationOptions.RunContinuationsAsynchronously);
 				}
 				finally
 				{

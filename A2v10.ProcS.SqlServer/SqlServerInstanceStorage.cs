@@ -12,41 +12,46 @@ namespace A2v10.ProcS.SqlServer
 	{
 		private readonly IDbContext _dbContext;
 		private readonly IWorkflowStorage _workflowStorage;
+		private readonly ISagaResolver _sagaResolver;
+		private readonly IResourceWrapper _resourceWrapper;
+
+
 		private const String Schema = "[A2v10.ProcS]";
 
-		public SqlServerInstanceStorage(IWorkflowStorage workflowStorage, IDbContext dbContext)
+		public SqlServerInstanceStorage(ISagaResolver sagaResolver, IWorkflowStorage workflowStorage, IDbContext dbContext, IResourceWrapper resourceWrapper)
 		{
 			_workflowStorage = workflowStorage ?? throw new ArgumentNullException(nameof(workflowStorage));
 			_dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+			_sagaResolver = sagaResolver ?? throw new ArgumentNullException(nameof(sagaResolver));
+			_resourceWrapper = resourceWrapper ?? throw new ArgumentNullException(nameof(resourceWrapper));
 		}
 
 		public async Task<IInstance> Load(Guid instanceId)
 		{
 			var prms = new DynamicObject();
 			prms.Set("Id", instanceId);
-			await foreach (var eo in _dbContext.ReadExpandoAsync(null, $"{Schema}.[Instance.Load]", prms))
+			var eo = await _dbContext.ReadExpandoAsync(null, $"{Schema}.[Instance.Load]", prms);
+			if (eo == null)
+				throw new ArgumentOutOfRangeException($"Instance '{instanceId}' not found");
+			var di = new DynamicObject(eo);
+			var identity = new Identity(di.Get<String>("Workflow"), di.Get<Int32>("Version"));
+			var inst = new Instance()
 			{
-				var di = new DynamicObject(eo);
-				var identity = new Identity(di.Get<String>("Workflow"), di.Get<Int32>("Version"));
-				var inst = new Instance()
-				{
-					Id = instanceId,
-					Workflow = await _workflowStorage.WorkflowFromStorage(identity)
-				};
-				var instanceState = DynamicObjectConverters.FromJson(di.Get<String>("InstanceState"));
-				var workflowState = DynamicObjectConverters.FromJson(di.Get<String>("WorkflowState"));
-				inst.Restore(instanceState);
-				inst.Workflow.Restore(workflowState);
-				return inst;
-			}
-			throw new ArgumentOutOfRangeException($"Instance '{instanceId}' not found");
+				Id = instanceId,
+				Workflow = await _workflowStorage.WorkflowFromStorage(identity)
+			};
+			var instanceState = DynamicObjectConverters.FromJson(di.Get<String>("InstanceState"));
+			var workflowState = DynamicObjectConverters.FromJson(di.Get<String>("WorkflowState"));
+			inst.Restore(instanceState, _resourceWrapper);
+			inst.Workflow.Restore(workflowState, _resourceWrapper);
+			return inst;
 		}
 
 		public async Task Save(IInstance instance)
 		{
 			var identity = instance.Workflow.GetIdentity();
-			var instanceState = instance.Store();
-			var wfState = instance.Workflow.Store();
+			var instanceState = instance.Store(_resourceWrapper);
+			var wfState = instance.Workflow.Store(_resourceWrapper);
 
 			DynamicObject di = new DynamicObject();
 

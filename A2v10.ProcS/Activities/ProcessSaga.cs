@@ -9,42 +9,68 @@ namespace A2v10.ProcS
 	[ResourceKey(ukey)]
 	public class SetBookmarkMessage : MessageBase<Guid>
 	{
-		public const string ukey = ProcS.ResName + ":" + nameof(SetBookmarkMessage);
+		public const String ukey = ProcS.ResName + ":" + nameof(SetBookmarkMessage);
+
 		[RestoreWith]
 		public SetBookmarkMessage(Guid correlationId) : base(correlationId)
 		{
-			Id = correlationId;
 		}
 		public SetBookmarkMessage(Guid id, IResultMessage resultMessage) : this(id)
 		{
 			ResultMessage = resultMessage;
 		}
 
-		public Guid Id { get; }
-		public IResultMessage ResultMessage { get; }
+		public IResultMessage ResultMessage { get; private set; }
+
+		public override void Store(IDynamicObject store, IResourceWrapper wrapper)
+		{
+			var dres = wrapper.Wrap(ResultMessage).Store(wrapper);
+			store.Set(nameof(ResultMessage), dres);
+		}
+
+		public override void Restore(IDynamicObject store, IResourceWrapper wrapper)
+		{
+			var dynres = store.GetDynamicObject(nameof(ResultMessage));
+			ResultMessage = wrapper.Unwrap<IResultMessage>(dynres);
+		}
 	}
 
 	[ResourceKey(ukey)]
 	public class ResumeBookmarkMessage : MessageBase<Guid>
 	{
-		public const string ukey = ProcS.ResName + ":" + nameof(ResumeBookmarkMessage);
+		public const String ukey = ProcS.ResName + ":" + nameof(ResumeBookmarkMessage);
+
 		[RestoreWith]
 		public ResumeBookmarkMessage(Guid correlationId) : base(correlationId)
 		{
 			Id = correlationId;
 		}
-		public ResumeBookmarkMessage(Guid id, IDynamicObject result) : this(id)
+
+		public ResumeBookmarkMessage(Guid correlationId, IDynamicObject result) : this(correlationId)
 		{
+			Id = correlationId;
 			Result = result;
 		}
 
-		public Guid Id { get; }
-		public IDynamicObject Result { get; }
+		public Guid Id { get; private set; }
+		public IDynamicObject Result { get; private set; }
+
+		public override void Store(IDynamicObject store, IResourceWrapper _)
+		{
+			store.Set(nameof(Id), Id);
+			store.Set(nameof(Result), Result);
+		}
+
+		public override void Restore(IDynamicObject store, IResourceWrapper _)
+		{
+			Id = store.Get<Guid>(nameof(Id));
+			Result = store.GetDynamicObject(nameof(Result));
+		}
 	}
 
 	public class BookmarkSaga : SagaBaseDispatched<Guid, SetBookmarkMessage, ResumeBookmarkMessage>
 	{
-		public const string ukey = ProcS.ResName + ":" + nameof(BookmarkSaga);
+		public const String ukey = ProcS.ResName + ":" + nameof(BookmarkSaga);
 
 		public BookmarkSaga() : base(ukey)
 		{
@@ -65,20 +91,33 @@ namespace A2v10.ProcS
 			context.SendMessage(resultMessage);
 			return Task.CompletedTask;
 		}
+
+		public override IDynamicObject Store(IResourceWrapper wrapper)
+		{
+			var d = new DynamicObject();
+			var dres = wrapper.Wrap(resultMessage).Store(wrapper);
+			d.Set(nameof(resultMessage), dres);
+			return d;
+		}
+		public override void Restore(IDynamicObject store, IResourceWrapper wrapper)
+		{
+			var dynmsg = store.GetDynamicObject(nameof(resultMessage));
+			resultMessage=  wrapper.Unwrap<IResultMessage>(dynmsg);
+		}
 	}
 
 	[ResourceKey(ukey)]
 	public class ContinueActivityMessage : MessageBase<Guid>, IResultMessage
 	{
-		public const string ukey = ProcS.ResName + ":" + nameof(ContinueActivityMessage);
-		public Guid InstanceId { get; }
+		public const String ukey = ProcS.ResName + ":" + nameof(ContinueActivityMessage);
+
+		public Guid InstanceId { get; private set; }
 		public IDynamicObject Result { get; set; }
-		public String Bookmark { get; }
+		public String Bookmark { get; private set; }
 
 		[RestoreWith]
 		public ContinueActivityMessage(Guid correlationId) : base(correlationId)
 		{
-
 		}
 
 		public ContinueActivityMessage(Guid instanceId, String bookmark, IDynamicObject result): base(instanceId)
@@ -93,28 +132,56 @@ namespace A2v10.ProcS
 			InstanceId = instanceId;
 			Bookmark = bookmark;
 		}
+
+		public override void Store(IDynamicObject store, IResourceWrapper _)
+		{
+			store.Set(nameof(InstanceId), InstanceId);
+			store.Set(nameof(Result), Result);
+			store.Set(nameof(Bookmark), Bookmark);
+		}
+
+		public override void Restore(IDynamicObject store, IResourceWrapper _)
+		{
+			InstanceId = store.Get<Guid>(nameof(InstanceId));
+			Result = store.GetDynamicObject(nameof(Result));
+			Bookmark = store.Get<String>(nameof(Bookmark));
+		}
 	}
 
 	[ResourceKey(ukey)]
 	public class StartProcessMessage : MessageBase<Guid>
 	{
-		public const string ukey = ProcS.ResName + ":" + nameof(StartProcessMessage);
+		public const String ukey = ProcS.ResName + ":" + nameof(StartProcessMessage);
 
-		public Guid ParentId { get; }
+		public Guid ParentId { get; private set; }
 		public String ProcessId { get; set; }
 		public IDynamicObject Parameters { get; set; }
 
 
 		[RestoreWith]
-		public StartProcessMessage(Guid parentId) : base(parentId)
+		public StartProcessMessage(Guid correlationId) : base(correlationId)
 		{
-			ParentId = parentId;
+			ParentId = correlationId;
+		}
+
+		public override void Store(IDynamicObject store, IResourceWrapper _)
+		{
+			store.Set(nameof(ParentId), ParentId);
+			store.Set(nameof(ProcessId), ProcessId);
+			store.Set(nameof(Parameters), Parameters);
+		}
+
+		public override void Restore(IDynamicObject store, IResourceWrapper _)
+		{
+			ParentId = store.Get<Guid>(nameof(ParentId));
+			ProcessId = store.Get<String>(nameof(ProcessId));
+			Parameters = store.GetDynamicObject(nameof(Parameters));
 		}
 	}
 
 	public class ProcessSaga : SagaBaseDispatched<String, StartProcessMessage, ContinueActivityMessage>
 	{
-		public const string ukey = ProcS.ResName + ":" + nameof(ProcessSaga);
+		public const String ukey = ProcS.ResName + ":" + nameof(ProcessSaga);
 
 		public ProcessSaga() : base(ukey)
 		{

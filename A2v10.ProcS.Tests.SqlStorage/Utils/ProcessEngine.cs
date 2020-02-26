@@ -6,32 +6,43 @@ using System.Linq;
 using System.Reflection;
 using Microsoft.Extensions.Configuration;
 
+using A2v10.Data;
+using A2v10.Data.Interfaces;
 using A2v10.ProcS.Infrastructure;
+using A2v10.ProcS.SqlServer;
 
-namespace A2v10.ProcS.Tests
+namespace A2v10.ProcS.Tests.SqlStorage
 {
 	public static class ProcessEngine
 	{
-		public static (WorkflowEngine engine, IRepository repository, ServiceBus bus) CreateEngine()
+		public static (WorkflowEngine engine, IRepository repository, ServiceBus bus) CreateSqlEngine()
 		{
-			var storage = new FakeStorage();
-			var pmr = new PluginManager(null);
+			var fullPath = Path.GetFullPath("../../../tests.config.json");
 
-			String pluginPath = GetPluginPath();
-			var configuration = new ConfigurationBuilder().Build();
-			pmr.LoadPlugins(pluginPath, configuration);
+			var configuration = new ConfigurationBuilder()
+				.AddJsonFile(fullPath)
+				.Build();
 
-			var rm = new ResourceManager(null);
-			
-			var mgr = new SagaManager(null);
-			ProcS.RegisterSagas(rm, mgr);
-			pmr.RegisterResources(rm, mgr);
-
+			var profiler = new NullDataProfiler();
+			var localizer = new NullDataLocalizer();
+			var dbConfig = new DatabaseConfig(configuration);
+			var dbContext = new SqlDbContext(profiler, dbConfig, localizer);
+			var workflowStorage = new FileSystemWorkflowStorage();
 			var taskManager = new SyncTaskManager();
-			var keeper = new InMemorySagaKeeper(mgr.Resolver);
+			
+			var rm = new ResourceManager(null);
+			var mgr = new SagaManager(null);
+
+			var instanceStorage = new SqlServerInstanceStorage(mgr.Resolver, workflowStorage, dbContext, rm);
+			var repository = new Repository(workflowStorage, instanceStorage);
+
+			ProcS.RegisterSagas(rm, mgr);
+
+			var keeper = new SqlServerSagaKeeper(mgr.Resolver, dbContext, rm);
+
 			var scriptEngine = new ScriptEngine();
-			var repository = new Repository(storage, storage);
 			var bus = new ServiceBus(taskManager, keeper, repository, scriptEngine);
+
 			var engine = new WorkflowEngine(repository, bus, scriptEngine);
 			return (engine, repository, bus);
 		}
