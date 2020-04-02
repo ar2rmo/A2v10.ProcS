@@ -6,5 +6,12 @@
 		"Data": {
 			"CommandTimeout": "00:00:02"
 		}
+	},
+	"ProcS": {
+		"Environment": {
+			"openweathermap": {
+				"url": "https://samples.openweathermap.org/data/2.5/weather"
+			}
+		}
 	}
 }
