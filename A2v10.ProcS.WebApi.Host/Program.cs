@@ -52,6 +52,7 @@ namespace A2v10.ProcS.WebApi.Host
 
 		public static IHostBuilder CreateHostBuilder(String[] args) =>
 			Host.CreateDefaultBuilder(args)
+				.UseWindowsService()
 				.ConfigureLogging(logging => {
 					logging.ClearProviders();
 					logging.AddEventLog();
@@ -113,7 +114,7 @@ namespace A2v10.ProcS.WebApi.Host
 				})
 				.ConfigureWebHostDefaults(webBuilder =>
 				{
-					webBuilder.UseStartup<Startup>();
+					webBuilder.UseStartup<Startup>().UseUrls("http://localhost:55580/");
 				});
 
 		
